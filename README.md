@@ -1,8 +1,49 @@
-# Plate Solver Microservice
+# Plate Solver Service
 
-Optionaler Microservice für Sky Atlas, der beim Bild-Upload automatisch die Position, Rotation und das Sichtfeld einer Astroaufnahme bestimmt. Basiert auf **Astrometry.net** (`solve-field`) mit einem schlanken **FastAPI**-Wrapper und einem **PHP-Client**.
+> Lean HTTP microservice for Astrometry.net plate solving. FastAPI wrapper around `solve-field` with optional PHP and Python clients. Runs locally, no external APIs.
+
+Schlanker HTTP-Microservice, der Astroaufnahmen hochgeladen bekommt und RA, Dec, Rotation und Sichtfeld (FOV) zurückgibt. Basiert auf **Astrometry.net** (`solve-field`) mit einem **FastAPI**-Wrapper.
 
 Alles lokal — keine externen APIs, keine API-Keys, kein Internet beim Solven nötig (nur einmalig beim Download der Index-Dateien).
+
+---
+
+## Quickstart
+
+```bash
+git clone https://github.com/DEIN-USER/plate-solver-service
+cd plate-solver-service
+
+sudo apt install astrometry.net astrometry-data-2mass-05 python3-venv
+python3 -m venv venv && venv/bin/pip install -r requirements.txt
+
+venv/bin/python app.py
+# → curl http://127.0.0.1:8011/solve -F "file=@test.jpg"
+```
+
+Das reicht für einen ersten Test. Für produktive Setups siehe **[Installation](#installation-produktiv)** unten: systemd-Service, dedizierter Systembenutzer, passende Index-Dateien.
+
+---
+
+## Wer nutzt das?
+
+Dieser Service wurde ursprünglich für den **[Sky Atlas](https://github.com/DEIN-USER/sky-atlas)** entwickelt, der beim Upload von Astrofotos automatisch deren Position bestimmt. Er ist aber stack-unabhängig — jede Anwendung mit HTTP-Client kann ihn ansprechen (PHP, Python, Node, curl, …).
+
+---
+
+## Projektstruktur
+
+```
+plate-solver-service/
+├── app.py                      ← FastAPI-Microservice
+├── solver.py                   ← solve-field Wrapper
+├── requirements.txt            ← Python-Abhängigkeiten
+├── systemd/
+│   └── platesolve.service      ← systemd-Unit
+├── examples/
+│   └── client.php              ← PHP-Referenz-Client
+└── README.md
+```
 
 ---
 
@@ -10,27 +51,26 @@ Alles lokal — keine externen APIs, keine API-Keys, kein Internet beim Solven n
 
 - Linux-Server (Debian / Ubuntu / Raspberry Pi OS / etc.)
 - Python ≥ 3.9
-- PHP ≥ 8.0 mit `curl`-Extension (für den Client)
-- ca. 500 MB – 2 GB freier Speicher für Index-Dateien (abhängig vom Bildfeld)
+- ca. 500 MB – 2 GB freier Speicher für Index-Dateien
 - Root-Zugriff für die Installation der Systempakete
 
-Getestet wurde das Setup auf Ubuntu 22.04 (aarch64 und x86_64). Auf anderen Distributionen sind die Paketnamen ggf. anzupassen (`dnf install astrometry.net` auf Fedora etc.).
+Getestet auf Ubuntu 22.04 (aarch64 und x86_64). Auf anderen Distributionen sind die Paketnamen ggf. anzupassen (`dnf install astrometry.net` auf Fedora etc.).
 
 ---
 
-## 1. Systemabhängigkeiten
+## Installation (produktiv)
 
-### 1.1 Astrometry.net
+### 1. Systemabhängigkeiten
 
 ```bash
 sudo apt install astrometry.net python3-venv
 ```
 
-### 1.2 Index-Dateien (Sternkataloge)
+### 2. Index-Dateien (Sternkataloge)
 
 Astrometry.net benötigt vorkompilierte Index-Dateien, die "Skymarks" für die Objekterkennung enthalten. Jede Index-Datei ist für eine bestimmte **Quad-Größe** optimiert — diese sollte **10–100 %** des kleineren Bildfeldes betragen.
 
-**Beispiel-Installation** für typische Astrofoto-Setups (Bildfeld ~30′ – 80′, z. B. Seestar S50, DWARF 3, kleine Refraktoren):
+**Beispiel-Installation** für typische Astrofoto-Setups (Bildfeld ~30′–80′, z. B. Seestar S50, DWARF 3, kleine Refraktoren):
 
 ```bash
 sudo apt install astrometry-data-2mass-04   # Quads  8'–11'
@@ -74,40 +114,11 @@ Die wichtigsten Serien im Überblick:
 
 Weitere Details und die vollständige Skalen-Tabelle: **[astrometry.net/doc/readme.html](https://astrometry.net/doc/readme.html)**
 
-> **Wenn du unsicher bist**, installiere großzügig — überflüssige Index-Dateien verlangsamen das Solven nur geringfügig, fehlende verhindern es ganz. Beim Blind-Solve ohne Positionshinweis sollten die vermuteten Skalen inklusive je einer Stufe darüber und darunter vorhanden sein.
+> **Wenn du unsicher bist**, installiere großzügig — überflüssige Index-Dateien verlangsamen das Solven nur geringfügig, fehlende verhindern es ganz.
 
----
-
-## 2. Projektverzeichnis
-
-Empfohlene Struktur (Pfad frei wählbar, hier `/opt/platesolve` als Beispiel):
-
-```
-/opt/platesolve/
-├── app.py              ← FastAPI-Microservice
-├── solver.py           ← solve-field Wrapper
-├── requirements.txt    ← Python-Abhängigkeiten
-├── platesolve.php      ← PHP-Client für die Web-Anwendung
-├── images/             ← Temporäre Bilddaten (auto-erstellt)
-└── venv/               ← Python-Umgebung (nach Setup)
-```
-
-Legge das Verzeichnis an und übernimm die Dateien aus dem Repository:
+### 3. Python-Umgebung
 
 ```bash
-sudo mkdir -p /opt/platesolve
-sudo chown $USER:$USER /opt/platesolve
-cd /opt/platesolve
-# app.py, solver.py, requirements.txt, platesolve.php hierher kopieren
-```
-
----
-
-## 3. Python-Umgebung einrichten
-
-```bash
-cd /opt/platesolve
-
 python3 -m venv venv
 venv/bin/pip install --upgrade pip
 venv/bin/pip install -r requirements.txt
@@ -122,18 +133,27 @@ astropy==6.1.0
 Pillow==10.3.0
 ```
 
----
+### 4. systemd-Service
 
-## 4. systemd-Service
-
-Empfohlen: eigener unprivilegierter Systembenutzer für den Service.
+Empfohlen: eigener unprivilegierter Systembenutzer.
 
 ```bash
 sudo useradd --system --shell /usr/sbin/nologin --home-dir /opt/platesolve platesolve
+sudo mkdir -p /opt/platesolve
+sudo cp -r . /opt/platesolve/
 sudo chown -R platesolve:platesolve /opt/platesolve
 ```
 
-Service-Datei nach `/etc/systemd/system/platesolve.service`:
+Service-Datei (im Repo unter `systemd/platesolve.service`) nach `/etc/systemd/system/` kopieren:
+
+```bash
+sudo cp systemd/platesolve.service /etc/systemd/system/
+sudo systemctl daemon-reload
+sudo systemctl enable --now platesolve
+sudo systemctl status platesolve
+```
+
+Inhalt `systemd/platesolve.service`:
 
 ```ini
 [Unit]
@@ -158,37 +178,48 @@ NoNewPrivileges=true
 WantedBy=multi-user.target
 ```
 
-Aktivieren und starten:
-
-```bash
-sudo systemctl daemon-reload
-sudo systemctl enable platesolve
-sudo systemctl start platesolve
-
-# Status prüfen
-sudo systemctl status platesolve
-```
-
-Der Service bindet auf `127.0.0.1:8011` — **nicht** von außen erreichbar. Für Remote-Nutzung einen Reverse-Proxy (nginx/Apache) mit Auth vorschalten.
+Der Service bindet auf `127.0.0.1:8011` — **nicht** von außen erreichbar. Für Remote-Nutzung einen Reverse-Proxy (nginx/Apache) mit Authentifizierung vorschalten.
 
 ---
 
-## 5. Manueller Test (curl)
+## API-Nutzung
+
+### Endpoint
+
+```
+POST http://127.0.0.1:8011/solve
+Content-Type: multipart/form-data
+```
+
+### Parameter
+
+| Feld | Typ | Beschreibung |
+|---|---|---|
+| `file` | File | **Erforderlich.** JPG, PNG, TIFF oder FITS |
+| `scale_low` | float | Untere Grenze Pixelskala in arcsec/px |
+| `scale_high` | float | Obere Grenze Pixelskala in arcsec/px |
+| `ra_hint` | float | RA-Hinweis in Grad J2000 |
+| `dec_hint` | float | Dec-Hinweis in Grad J2000 |
+| `radius_hint` | float | Suchradius in Grad (mit RA/Dec-Hint, Default 5°) |
+
+Alle außer `file` sind optional. Je mehr Hints, desto schneller das Solve (Blind: bis 2 min, mit Skala: ~10–30 s, mit Position: oft < 10 s).
+
+### Beispiele (curl)
 
 ```bash
-# Minimal – Blind Solve (langsam, bis zu 2 min)
+# Blind solve
 curl -s -X POST http://127.0.0.1:8011/solve \
-     -F "file=@/pfad/zum/bild.jpg" | python3 -m json.tool
+     -F "file=@test.jpg" | python3 -m json.tool
 
-# Mit Pixelskala-Hints (deutlich schneller)
+# Mit Pixelskala-Hints
 curl -s -X POST http://127.0.0.1:8011/solve \
-     -F "file=@/pfad/zum/bild.jpg" \
+     -F "file=@test.jpg" \
      -F "scale_low=2.0" \
      -F "scale_high=2.8" | python3 -m json.tool
 
-# Mit Positionshinweis (am schnellsten, meist < 10 s)
+# Mit Positionshinweis (am schnellsten)
 curl -s -X POST http://127.0.0.1:8011/solve \
-     -F "file=@/pfad/zum/bild.jpg" \
+     -F "file=@test.jpg" \
      -F "scale_low=2.0" \
      -F "scale_high=2.8" \
      -F "ra_hint=83.82" \
@@ -196,7 +227,7 @@ curl -s -X POST http://127.0.0.1:8011/solve \
      -F "radius_hint=5" | python3 -m json.tool
 ```
 
-Beispielantwort:
+### Response
 
 ```json
 {
@@ -211,18 +242,20 @@ Beispielantwort:
 }
 ```
 
-| Feld                  | Bedeutung                           |
-|-----------------------|-------------------------------------|
-| `ra`                  | Rektaszension Bildmitte, Grad J2000 |
-| `dec`                 | Deklination Bildmitte, Grad J2000   |
-| `rotation`            | Positionswinkel Nord, Grad          |
-| `scale_arcsec_per_px` | Pixelskala in arcsec/px             |
-| `fov_width_deg`       | Gesichtsfeld Breite in Grad         |
-| `fov_height_deg`      | Gesichtsfeld Höhe in Grad           |
+| Feld | Bedeutung |
+|---|---|
+| `ra` | Rektaszension Bildmitte, Grad J2000 |
+| `dec` | Deklination Bildmitte, Grad J2000 |
+| `rotation` | Positionswinkel Nord, Grad |
+| `scale_arcsec_per_px` | Pixelskala in arcsec/px |
+| `fov_width_deg` | Gesichtsfeld Breite in Grad |
+| `fov_height_deg` | Gesichtsfeld Höhe in Grad |
+
+Bei Fehler liefert der Service HTTP 4xx/5xx mit JSON-Body `{"detail": "…"}` oder `{"error": "…"}`.
 
 ---
 
-## 6. Pixelskala berechnen
+## Pixelskala berechnen
 
 ```
 Pixelskala [arcsec/px] = (FOV_Breite [°] × 3600) / Bildbreite [px]
@@ -235,16 +268,16 @@ Pixelskala [arcsec/px] = (FOV_Breite [°] × 3600) / Bildbreite [px]
 → scale_low=2.0  scale_high=2.8
 ```
 
-Richtwerte für gängige Teleskop-/Kamera-Kombinationen findet man oft in den Datenblättern der Hersteller oder per Online-Rechner wie [astronomy.tools/calculators/field_of_view](https://astronomy.tools/calculators/field_of_view).
+Online-Rechner für Teleskop-/Kamera-Kombinationen: [astronomy.tools/calculators/field_of_view](https://astronomy.tools/calculators/field_of_view).
 
 ---
 
-## 7. PHP-Integration
+## Beispiel-Integration (PHP)
 
-`platesolve.php` in die Web-Anwendung einbinden:
+Der Referenz-Client liegt unter `examples/client.php`:
 
 ```php
-require_once '/opt/platesolve/platesolve.php';
+require_once 'examples/client.php';
 
 try {
     $result = platesolve(
@@ -264,15 +297,13 @@ try {
     echo $result['fov_height_deg'];      // 1.2808
 
 } catch (RuntimeException $e) {
-    // Fehlermeldung aus dem Microservice (nicht erreichbar,
-    // kein Match, HTTP-Fehler, etc.)
     echo 'Fehler: ' . $e->getMessage();
 }
 ```
 
-### Timeouts
+### Timeouts für PHP-Clients
 
-Der PHP-Client wartet standardmäßig **180 Sekunden**. `max_execution_time` (PHP) und das Server-Timeout (Apache/nginx) müssen **mindestens so hoch** sein, sonst bricht die Verbindung vorzeitig ab.
+Der mitgelieferte Client wartet standardmäßig **180 Sekunden**. `max_execution_time` (PHP) und das Server-Timeout (Apache/nginx) müssen **mindestens so hoch** sein:
 
 ```ini
 ; php.ini
@@ -286,7 +317,32 @@ Timeout 300
 
 ---
 
-## 8. Betrieb & Wartung
+## Beispiel-Integration (Python)
+
+```python
+import requests
+
+with open('test.jpg', 'rb') as f:
+    r = requests.post(
+        'http://127.0.0.1:8011/solve',
+        files={'file': f},
+        data={
+            'scale_low':  2.0,
+            'scale_high': 2.8,
+            'ra_hint':    83.82,
+            'dec_hint':  -5.39,
+        },
+        timeout=180,
+    )
+
+r.raise_for_status()
+result = r.json()
+print(f"RA {result['ra']:.4f}  Dec {result['dec']:.4f}")
+```
+
+---
+
+## Betrieb & Wartung
 
 ```bash
 # Logs live verfolgen
@@ -298,28 +354,29 @@ sudo systemctl restart platesolve
 # Service stoppen
 sudo systemctl stop platesolve
 
-# Alte Bilder aufräumen (images/ wächst unbegrenzt)
+# Temporäre Bilder aufräumen (images/ wächst unbegrenzt)
 find /opt/platesolve/images/ -type f -mtime +30 -delete
 ```
 
-Als systemd-Timer automatisieren (Datei `/etc/systemd/system/platesolve-cleanup.timer` + passender Service) oder klassisch per Cron.
+Den Cleanup als systemd-Timer automatisieren oder per Cron.
 
 ---
 
 ## Troubleshooting
 
-**"Service nicht erreichbar"**
+**"Connection refused" / Service nicht erreichbar**
 - Läuft `platesolve.service`? → `sudo systemctl status platesolve`
 - Bindet er auf 127.0.0.1:8011? → `ss -tlnp | grep 8011`
+- Logs: `journalctl -u platesolve -n 50`
 
 **"Kein Match gefunden" bei bekannt gutem Bild**
 - Passende Index-Dateien installiert? → `apt list --installed | grep astrometry-data`
-- Pixelskala korrekt geschätzt? → siehe Abschnitt 6
+- Pixelskala korrekt geschätzt? → siehe [Pixelskala berechnen](#pixelskala-berechnen)
 - Bildfeld zu klein/groß für vorhandene Quads? → zusätzliche Index-Dateien von [data.astrometry.net](https://data.astrometry.net/) laden
 
 **Solve dauert > 2 Minuten**
 - Ohne Hints ist Blind-Solve langsam. Pixelskala-Hints bringen Faktor 5–10, Positions-Hints nochmal Faktor 10.
-- Zu viele Index-Dateien geladen? Engine lädt nur die passenden — aber mehr Skalen = mehr Kandidaten. Aufräumen hilft.
+- Zu viele Index-Dateien geladen? Aufräumen kann helfen.
 
 ---
 
@@ -329,3 +386,11 @@ Als systemd-Timer automatisieren (Datei `/etc/systemd/system/platesolve-cleanup.
 - [Index-Dateien-Download](https://data.astrometry.net/) — Alle Serien und Skalen
 - [GitHub: dstndstn/astrometry.net](https://github.com/dstndstn/astrometry.net) — Quellcode
 - Lang, D. et al. (2010): *Astrometry.net: Blind astrometric calibration of arbitrary astronomical images*, AJ 137, 1782–1800 — [arXiv:0910.2233](https://arxiv.org/abs/0910.2233)
+
+---
+
+## Lizenz
+
+MIT — siehe [LICENSE](LICENSE).
+
+Astrometry.net selbst steht unter BSD-3 und muss bei wissenschaftlicher Nutzung zitiert werden (siehe obiges Paper).
