@@ -1,6 +1,6 @@
 # Plate Solver Microservice
 
-Schlanker HTTP-Microservice für Astrometry.net Plate Solving. Genutzt u. a. von Sky Atlas. Basiert auf **Astrometry.net** (`solve-field`) mit einem schlanken **FastAPI**-Wrapper und einem **PHP-Client**.
+Optionaler Microservice für Sky Atlas, der beim Bild-Upload automatisch die Position, Rotation und das Sichtfeld einer Astroaufnahme bestimmt. Basiert auf **Astrometry.net** (`solve-field`) mit einem schlanken **FastAPI**-Wrapper und einem **PHP-Client**.
 
 Alles lokal — keine externen APIs, keine API-Keys, kein Internet beim Solven nötig (nur einmalig beim Download der Index-Dateien).
 
